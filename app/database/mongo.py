@@ -1,17 +1,17 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import settings
 
-client: AsyncIOMotorClient = None
-db = None
+class MongoDB:
+    client: AsyncIOMotorClient = None
+    db = None
+
+mongo = MongoDB()
 
 async def connect_to_mongo():
-    global client, db
-    client = AsyncIOMotorClient(settings.MONGODB_URL)
-    db = client[settings.MONGO_DB_NAME]
+    mongo.client = AsyncIOMotorClient(settings.MONGODB_URL)
+    mongo.db = mongo.client[settings.MONGO_DB_NAME]
     print("✅ Connected to MongoDB")
 
 async def close_mongo_connection():
-    global client
-    if client:
-        client.close()
-        print("🔌 MongoDB connection closed")
+    mongo.client.close()
+    print("🛑 MongoDB connection closed")
