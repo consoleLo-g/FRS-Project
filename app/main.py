@@ -1,23 +1,10 @@
 from fastapi import FastAPI
+from app.api.routes_frs import router as frs_router
 
-app = FastAPI(title="Face Recognition System (FRS)")
+app = FastAPI(title="Facial Recognition System")
 
 @app.get("/")
-def root():
-    return {"message": "Welcome to the Face Recognition Service 🚀"}
+def read_root():
+    return {"message": "Welcome to the Facial Recognition API 🚀"}
 
-@app.post("/detect")
-def detect_faces():
-    return {"status": "Face detection endpoint ready"}
-
-@app.post("/recognize")
-def recognize_faces():
-    return {"status": "Face recognition endpoint ready"}
-
-@app.post("/add_identity")
-def add_identity():
-    return {"status": "Add identity endpoint ready"}
-
-@app.get("/list_identities")
-def list_identities():
-    return {"status": "List identities endpoint ready"}
+app.include_router(frs_router, prefix="/frs", tags=["Face Recognition"])
