@@ -1,10 +1,11 @@
 fastapi
 uvicorn[standard]
-torch
-torchvision
-opencv-python-headless
 numpy
-pillow
-scikit-learn
+opencv-python-headless
+Pillow
+insightface
+motor
+python-multipart
+aiofiles
 onnxruntime
-facenet-pytorch
+faiss-cpu
