@@ -1,18 +1,15 @@
 # app/routes.py
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from PIL import Image
 import io
 import numpy as np
 from typing import List
-from app.utils.utils import detect_faces_pil, cosine_sim, topk_bruteforce
-from app.database.mongo_gallery import connect, close, init_db, add_identity, list_identities, load_gallery
+from app.utils.utils import detect_faces_pil, cosine_sim
+from app.database.mongo_gallery import connect, close, init_db, add_identity, list_identities, load_gallery, load_gallery_cache
 from app.core.config import settings
-from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/frs", tags=["Face Recognition"])
 
-# connect to mongo when router imported (app startup will also call connect; ensure idempotent)
-# We'll expose lifecycle in main.py which will call connect and init_db
 @router.post("/detect")
 async def detect_endpoint(file: UploadFile = File(...)):
     data = await file.read()
@@ -65,15 +62,15 @@ async def recognize_endpoint(file: UploadFile = File(...), top_k: int = settings
     faces = await detect_faces_pil(img)
     if len(faces) == 0:
         raise HTTPException(status_code=400, detail="No faces detected")
-    gallery = await load_gallery()
+    gallery = await load_gallery_cache()
     if len(gallery) == 0:
         raise HTTPException(status_code=400, detail="Gallery empty. Add identities first.")
-    # Prestack gallery embeddings for speed
-    gallery_embs = [r["embedding"] for r in gallery]
+    gallery_embs = [r["embedding"] for r in gallery if r.get("embedding") is not None]
+    if len(gallery_embs) == 0:
+        raise HTTPException(status_code=500, detail="Gallery embeddings unavailable.")
     out = []
     for i, f in enumerate(faces):
         q = f["embedding"]
-        # brute-force topk
         sims = np.array([float(np.dot(q, emb)) for emb in gallery_embs])
         idxs = np.argsort(-sims)[:top_k]
         candidates = []

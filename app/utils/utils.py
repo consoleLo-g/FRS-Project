@@ -6,30 +6,33 @@ from typing import List, Dict, Any
 from app.models.model_frs import fa
 from app.core.config import settings
 from starlette.concurrency import run_in_threadpool
+import logging
+
+logger = logging.getLogger("uvicorn")
 
 def pil_to_bgr_np(img: Image.Image) -> np.ndarray:
-    """Convert PIL RGB -> OpenCV BGR ndarray"""
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-def _detect_blocking(img_bgr: np.ndarray):
-    """
-    Blocking call to insightface.FaceAnalysis.get
-    Returns list of Face objects
-    """
-    return fa.get(img_bgr)
+def bgr_np_to_pil(img_bgr: np.ndarray) -> Image.Image:
+    rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(rgb)
 
-async def detect_faces_pil(img_pil: Image.Image) -> List[Dict[str, Any]]:
-    """
-    Async wrapper: returns list of dicts:
-    {bbox: [x1,y1,x2,y2], score: float, kps: [[x,y],...], embedding: np.ndarray (L2-normalized)}
-    """
+def _detect_blocking(img_bgr: np.ndarray):
+    try:
+        return fa.get(img_bgr)
+    except Exception as e:
+        logger.exception("FaceAnalysis.get failed: %s", e)
+        return []
+
+async def detect_faces_pil(img_pil: Image.Image, max_faces: int = None) -> List[Dict[str, Any]]:
     img_bgr = pil_to_bgr_np(img_pil)
     faces = await run_in_threadpool(_detect_blocking, img_bgr)
+    if max_faces:
+        faces = faces[:max_faces]
 
     results = []
     for f in faces:
-        # bounding box & score
-        bbox = [int(float(x)) for x in f.bbox]  # x1,y1,x2,y2
+        bbox = [int(float(x)) for x in f.bbox]
         score = float(getattr(f, "det_score", getattr(f, "score", 0.0)))
         if score < settings.MIN_SCORE:
             continue
@@ -54,6 +57,10 @@ async def detect_faces_pil(img_pil: Image.Image) -> List[Dict[str, Any]]:
         })
     return results
 
+async def detect_faces_from_bgr_np(img_bgr: np.ndarray, max_faces: int = None) -> List[Dict[str, Any]]:
+    pil = bgr_np_to_pil(img_bgr)
+    return await detect_faces_pil(pil, max_faces=max_faces)
+
 def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     if a is None or b is None:
         return -1.0
@@ -62,7 +69,7 @@ def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
 def topk_bruteforce(query_emb: np.ndarray, gallery_embs: List[np.ndarray], top_k: int = 3):
     if query_emb is None or len(gallery_embs) == 0:
         return []
-    embs = np.stack(gallery_embs)  # (N, D)
-    sims = np.dot(embs, query_emb)  # (N,)
+    embs = np.stack(gallery_embs)
+    sims = np.dot(embs, query_emb)
     idxs = np.argsort(-sims)[:top_k]
     return [{"index": int(i), "score": float(sims[i])} for i in idxs]
